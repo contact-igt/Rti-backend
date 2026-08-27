@@ -23,7 +23,7 @@ const APPEAL_DISCLAIMER =
 function detectJurisdiction(problem: string): RTIJurisdiction {
   const text = problem.toLowerCase();
 
-  if (/\b(central government|union government|railways?|income tax|epfo)\b/.test(text)) {
+  if (/\b(central government|union government|railways?|income tax|epfo|passport|psk)\b/.test(text)) {
     return 'central';
   }
 
@@ -55,6 +55,20 @@ export function createFallbackAnalysis(problem: string): RTIAnalysis {
       clarificationQuestion: needsClarification
         ? 'Is your pension handled by the Central Government or by a State Government?'
         : null
+    });
+  }
+
+  if (/\b(passport|passport seva|psk)\b/i.test(problem)) {
+    return rtiAnalysisSchema.parse({
+      issueType: 'Passport application status and processing',
+      informationNeeded: [
+        'Current passport application status',
+        'Records showing file movement and processing history',
+        'Recorded action taken on the passport application'
+      ],
+      jurisdiction: 'central',
+      clarificationNeeded: false,
+      clarificationQuestion: null
     });
   }
 

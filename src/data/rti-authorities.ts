@@ -106,6 +106,29 @@ export const centralAuthorities = [
     source: 'https://www.mha.gov.in/'
   },
   {
+    id: 'central-mea-psp',
+    name: 'Passport Seva Project (PSP) Division',
+    department: 'Ministry of External Affairs',
+    jurisdiction: 'central',
+    topics: [
+      'passport',
+      'passport seva',
+      'passport application',
+      'passport issuance',
+      'passport reissue',
+      'passport renewal',
+      'passport status',
+      'passport office',
+      'regional passport office',
+      'psk',
+      'passport seva kendra',
+      'psp division'
+    ],
+    keywords: ['passport', 'passport seva', 'psk', 'passport seva kendra', 'psp division'],
+    description: 'Handles passport services and Passport Seva operations under the Ministry of External Affairs.',
+    source: 'https://www.passportindia.gov.in/psp/RTI'
+  },
+  {
     id: 'central-railways',
     name: 'Ministry of Railways',
     jurisdiction: 'central',
