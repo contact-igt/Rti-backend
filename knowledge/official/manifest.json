@@ -1,0 +1,22 @@
+{
+  "documents": [
+    {
+      "filename": "right-to-information-act-2005-updated.pdf",
+      "title": "The Right to Information Act, 2005 (Updated)",
+      "organization": "Department of Personnel and Training, Government of India",
+      "sourceUrl": "https://dopt.gov.in/sites/default/files/RTI%20Act%202005%20%28Updated%29.PDF",
+      "jurisdiction": "national",
+      "documentType": "statute",
+      "sha256": "C25C457D8CF979F7BCAE76F65A3D02A611F978D99A7E7D11BA690791EDEE691E"
+    },
+    {
+      "filename": "central-rti-online-faq.html",
+      "title": "RTI Online Frequently Asked Questions",
+      "organization": "Department of Personnel and Training, Government of India",
+      "sourceUrl": "https://rtionline.gov.in/faq.php",
+      "jurisdiction": "central",
+      "documentType": "official_faq",
+      "sha256": "7DDC2D9F1D01BD425491999671F6EFFD469188EF52C7018E5CF474FD1A7573E6"
+    }
+  ]
+}
