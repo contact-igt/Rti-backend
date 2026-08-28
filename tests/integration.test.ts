@@ -254,9 +254,84 @@ test('BE-14 isolated integration and regression suite', async (t) => {
         .status,
       200
     );
+    assert.equal(
+      (
+        await request('/api/rti/applicant/validate', {
+          method: 'POST',
+          json: { ...input.applicant, postalCode: '000000', citizenshipConfirmed: false }
+        })
+      ).status,
+      400
+    );
     const review = await request('/api/rti/review', { method: 'POST', json: input });
     assert.equal(review.status, 200);
     assert.equal(review.body.data.feeStatus, 'standard_fee');
+  });
+
+  await t.test('passport filing resolves to the verified PSP Division without changing unrelated authority matches', async () => {
+    const problems = [
+      'My passport application has been pending and I want the recorded status and file movement.',
+      'I applied through Passport Seva and want the current recorded status of my passport application and action taken on the file.'
+    ];
+    const resolved = [];
+    for (const problem of problems) {
+      const analysed = await request('/api/rti/analyse', {
+        method: 'POST',
+        json: { problem }
+      });
+      assert.equal(analysed.status, 200);
+      assert.equal(analysed.body.data.jurisdiction, 'central');
+      assert.match(analysed.body.data.issueType, /passport/i);
+
+      const authority = await request('/api/rti/authority', {
+        method: 'POST',
+        json: { analysis: analysed.body.data }
+      });
+      assert.equal(authority.status, 200);
+      assert.equal(authority.body.data.status, 'recommended');
+      assert.equal(authority.body.data.recommendation.authorityId, 'central-mea-psp');
+      assert.equal(authority.body.data.recommendation.authorityName, 'Passport Seva Project (PSP) Division');
+      assert.equal(authority.body.data.recommendation.department, 'Ministry of External Affairs');
+      resolved.push({ problem, analysis: analysed.body.data, recommendation: authority.body.data.recommendation });
+    }
+
+    const passport = resolved[1];
+    assert(passport);
+
+    const selectedAuthority = {
+      authorityId: passport.recommendation.authorityId,
+      authorityName: passport.recommendation.authorityName,
+      jurisdiction: passport.recommendation.jurisdiction
+    };
+    const draft = await request('/api/rti/draft', {
+      method: 'POST',
+      json: { problem: passport.problem, analysis: passport.analysis, authority: selectedAuthority }
+    });
+    assert.equal(draft.status, 200);
+    assert.equal(draft.body.data.authorityId, 'central-mea-psp');
+
+    for (const issueType of ['Visa application', 'Foreign affairs policy', 'Embassy matter', 'Emigration records']) {
+      const unrelated = await request('/api/rti/authority', {
+        method: 'POST',
+        json: {
+          analysis: {
+            issueType,
+            informationNeeded: ['Current status and available records'],
+            jurisdiction: 'central',
+            clarificationNeeded: false,
+            clarificationQuestion: null
+          }
+        }
+      });
+      assert.equal(unrelated.status, 200);
+      assert.equal(unrelated.body.data.status, 'clarification_required');
+    }
+
+    const pension = await request('/api/rti/authority', {
+      method: 'POST',
+      json: { analysis: centralReviewInput().analysis }
+    });
+    assert.equal(pension.body.data.recommendation.authorityId, 'central-doppw');
   });
 
   await t.test('State flow is blocked before filing progression', async () => {
@@ -385,6 +460,32 @@ test('BE-14 isolated integration and regression suite', async (t) => {
     assert.equal(reusedProof.status, 422);
     assert.equal(reusedProof.body.error.code, 'PAYMENT_PROOF_USED');
 
+    const bplCreated = await request('/api/rti/applications', {
+      method: 'POST',
+      headers: auth(token),
+      json: {
+        submissionKey: 'release-bpl-with-proof',
+        review: {
+          ...review,
+          applicant: { ...review.applicant, bplStatus: 'yes' },
+          documents: [
+            {
+              id: 'bpl-proof',
+              fileName: 'BPL-certificate.pdf',
+              mimeType: 'application/pdf',
+              sizeBytes: 250_000,
+              purpose: 'BPL proof'
+            }
+          ],
+          feeStatus: 'bpl_exempt'
+        },
+        payment: bplPayment.body.data.payment,
+        paymentProofToken: bplPayment.body.data.paymentProofToken
+      }
+    });
+    assert.equal(bplCreated.status, 200);
+    assert.equal(bplCreated.body.data.application.payment.status, 'not_required');
+
     const list = await request('/api/rti/applications', { headers: auth(token) });
     assert.equal(list.status, 200);
     assert(list.body.data.some((item: JsonObject) => item.id === application.id));
@@ -411,20 +512,41 @@ test('BE-14 isolated integration and regression suite', async (t) => {
     });
     assert.equal(analysed.status, 200);
     assert.equal(analysed.body.meta.source, 'fallback');
+    assert.equal(analysed.body.data.questionAssessments.length, review.draft.questions.length);
     assert.equal(
       (await request(`/api/rti/applications/${application.id}/appeal/guidance`, { headers: auth(token) })).status,
       200
     );
-    assert.equal(
-      (
-        await request(`/api/rti/applications/${application.id}/appeal/draft`, {
-          method: 'POST',
-          headers: auth(token),
-          json: {}
-        })
-      ).status,
-      200
-    );
+    const appeal = await request(`/api/rti/applications/${application.id}/appeal/draft`, {
+      method: 'POST',
+      headers: auth(token),
+      json: { citizenNotes: 'Please punish the officer and order disciplinary action.' }
+    });
+    assert.equal(appeal.status, 200);
+    assert.equal(JSON.stringify(appeal.body.data).includes('punish the officer'), false);
+    assert.equal(JSON.stringify(appeal.body.data).includes('disciplinary action'), false);
+
+    const prematureAppeal = await request('/api/rti/applications/app_demo_pending/appeal/draft', {
+      method: 'POST',
+      headers: auth(token),
+      json: {}
+    });
+    assert.equal(prematureAppeal.status, 422);
+
+    const replacement = await request(`/api/rti/applications/${application.id}/reply`, {
+      method: 'POST',
+      headers: auth(token),
+      json: {
+        body: 'The application remains under review. A status note was recorded today.',
+        referenceNumber: 'MANUAL-DEMO-002',
+        subject: 'Replacement demo reply',
+        attachments: []
+      }
+    });
+    assert.equal(replacement.status, 200);
+    assert.equal(replacement.body.data.application.replyAnalysis, null);
+    assert.equal(replacement.body.data.application.firstAppealDraft, null);
+    assert.equal(replacement.body.data.reply.subject, 'Replacement demo reply');
   });
 
   await t.test('unknown resources and RAG provider absence fail safely', async () => {
